@@ -18,68 +18,56 @@
   margin: 10px;
 }
 
-/* Toolbar */
-.supernote-toolbar {
+/* Floating controls - top right */
+.supernote-floating-controls {
+  position: fixed;
+  top: 50px;
+  right: 16px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  background-color: var(--background-secondary);
-  border-bottom: 1px solid var(--background-modifier-border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  gap: 6px;
+  z-index: 100;
 }
 
-.supernote-toolbar-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.supernote-title {
-  font-weight: 600;
-  font-size: 1.1em;
-}
-
-.supernote-page-count {
-  color: var(--text-muted);
-  font-size: 0.9em;
-}
-
-.supernote-toolbar-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.supernote-toolbar-btn {
-  padding: 6px 12px;
-  border-radius: 4px;
+/* Minimal icon buttons */
+.supernote-icon-btn {
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border-radius: 6px;
   border: 1px solid var(--background-modifier-border);
   background-color: var(--background-primary);
-  color: var(--text-normal);
+  color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.85em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.supernote-toolbar-btn:hover {
-  background-color: var(--background-modifier-hover);
+.supernote-icon-btn:hover {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
 }
 
-.supernote-toolbar-btn.active {
-  background-color: var(--interactive-accent);
-  color: var(--text-on-accent);
-  border-color: var(--interactive-accent);
+.supernote-icon-btn.active {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+  border-color: var(--text-muted);
+}
+
+.supernote-icon-btn svg {
+  display: block;
 }
 
 /* Pages container */
 .supernote-pages {
-  padding: 20px;
+  padding: 16px;
+  padding-top: 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
 }
 
 /* Two-page view */
@@ -91,8 +79,8 @@
 }
 
 .supernote-pages.view-two-page .supernote-page {
-  flex: 0 0 calc(50% - 20px);
-  max-width: calc(50% - 20px);
+  flex: 0 0 calc(50% - 12px);
+  max-width: calc(50% - 12px);
 }
 
 /* Single page view */
@@ -108,7 +96,7 @@
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 /* Page number badge */
@@ -116,9 +104,9 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: rgba(0, 0, 0, 0.5);
   color: white;
-  padding: 4px 8px;
+  padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.75em;
   font-weight: 500;
@@ -144,14 +132,14 @@
 }
 
 .supernote-pages.fit-height .supernote-page {
-  max-height: calc(100vh - 100px);
+  max-height: calc(100vh - 80px);
   width: auto;
 }
 
 .supernote-pages.fit-height .supernote-page-image {
   width: auto;
   height: auto;
-  max-height: calc(100vh - 120px);
+  max-height: calc(100vh - 100px);
   max-width: 100%;
   object-fit: contain;
 }
@@ -159,12 +147,12 @@
 /* Two-page + fit-height combo */
 .supernote-pages.view-two-page.fit-height .supernote-page {
   flex: 0 0 auto;
-  max-width: calc(50% - 20px);
-  max-height: calc(100vh - 100px);
+  max-width: calc(50% - 12px);
+  max-height: calc(100vh - 80px);
 }
 
 .supernote-pages.view-two-page.fit-height .supernote-page-image {
-  max-height: calc(100vh - 120px);
+  max-height: calc(100vh - 100px);
   max-width: 100%;
 }
 
@@ -188,14 +176,8 @@
     max-width: 100%;
   }
 
-  .supernote-toolbar {
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
-  }
-
-  .supernote-toolbar-controls {
-    width: 100%;
-    justify-content: flex-start;
+  .supernote-floating-controls {
+    top: 45px;
+    right: 10px;
   }
 }
