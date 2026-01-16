@@ -21,6 +21,7 @@ export interface MarkLayer {
   name: string;
   protocol: string;
   bitmapData: Uint8Array | null;
+  totalPath: string | null;  // Contains dimension info
 }
 
 const LENGTH_FIELD_SIZE = 4;
@@ -126,6 +127,7 @@ export function parseMarkFile(buffer: Uint8Array): MarkFile {
         name: layerParams['LAYERNAME'] as string || 'MAINLAYER',
         protocol: layerParams['LAYERPROTOCOL'] as string || 'RATTA_RLE',
         bitmapData,
+        totalPath: layerParams['TOTALPATH'] as string || null,
       });
     }
 
@@ -144,6 +146,7 @@ export function parseMarkFile(buffer: Uint8Array): MarkFile {
             name: layerParams['LAYERNAME'] as string || layerKey,
             protocol: layerParams['LAYERPROTOCOL'] as string || 'RATTA_RLE',
             bitmapData,
+            totalPath: layerParams['TOTALPATH'] as string || null,
           });
         }
       }
@@ -161,6 +164,28 @@ export function parseMarkFile(buffer: Uint8Array): MarkFile {
     equipment,
     pages,
   };
+}
+
+// Parse dimensions from TOTALPATH string (format: "c x y width height" or similar)
+export function parseTotalPath(totalPath: string | null): { width: number; height: number } | null {
+  if (!totalPath) return null;
+
+  // TOTALPATH format examples: "c 0 0 1404 1872" or just coordinates
+  const parts = totalPath.trim().split(/\s+/);
+
+  // Try to find width and height (last two numbers)
+  const numbers = parts.filter(p => /^\d+$/.test(p)).map(Number);
+
+  if (numbers.length >= 2) {
+    // Last two numbers are typically width and height
+    const width = numbers[numbers.length - 2];
+    const height = numbers[numbers.length - 1];
+    if (width > 0 && height > 0) {
+      return { width, height };
+    }
+  }
+
+  return null;
 }
 
 // Annotation dimensions based on device

@@ -3,7 +3,7 @@
  * Uses the same RLE decoding as .note files
  */
 
-import { MarkFile, MarkPage, getAnnotationDimensions } from './mark-parser';
+import { MarkFile, MarkPage, getAnnotationDimensions, parseTotalPath } from './mark-parser';
 
 // RLE color codes (same as .note files)
 const COLORCODE_BLACK = 0x61;
@@ -88,7 +88,15 @@ export function renderAnnotationLayer(
     return null; // No annotations for this page
   }
 
-  const dims = getAnnotationDimensions(mark.equipment);
+  // Try to get dimensions from the first layer's TOTALPATH
+  let dims = getAnnotationDimensions(mark.equipment);
+  for (const layer of page.layers) {
+    const layerDims = parseTotalPath(layer.totalPath);
+    if (layerDims) {
+      dims = layerDims;
+      break;
+    }
+  }
 
   // Create composite canvas for all layers
   const canvas = document.createElement('canvas');
@@ -100,18 +108,21 @@ export function renderAnnotationLayer(
   for (const layer of page.layers) {
     if (!layer.bitmapData || layer.protocol !== 'RATTA_RLE') continue;
 
+    // Get layer-specific dimensions if available
+    const layerDims = parseTotalPath(layer.totalPath) || dims;
+
     try {
-      const imageData = decodeRle(layer.bitmapData, dims.width, dims.height);
+      const imageData = decodeRle(layer.bitmapData, layerDims.width, layerDims.height);
 
       // Create temp canvas for this layer
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = dims.width;
-      tempCanvas.height = dims.height;
+      tempCanvas.width = layerDims.width;
+      tempCanvas.height = layerDims.height;
       const tempCtx = tempCanvas.getContext('2d')!;
       tempCtx.putImageData(imageData, 0, 0);
 
-      // Composite onto main canvas
-      ctx.drawImage(tempCanvas, 0, 0);
+      // Composite onto main canvas (scale if needed)
+      ctx.drawImage(tempCanvas, 0, 0, dims.width, dims.height);
     } catch (error) {
       console.error(`Error rendering layer ${layer.name}:`, error);
     }

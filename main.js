@@ -27555,7 +27555,8 @@ function parseMarkFile(buffer) {
       layers.push({
         name: layerParams["LAYERNAME"] || "MAINLAYER",
         protocol: layerParams["LAYERPROTOCOL"] || "RATTA_RLE",
-        bitmapData
+        bitmapData,
+        totalPath: layerParams["TOTALPATH"] || null
       });
     }
     for (const layerKey of ["LAYER1", "LAYER2", "LAYER3", "BGLAYER"]) {
@@ -27569,7 +27570,8 @@ function parseMarkFile(buffer) {
           layers.push({
             name: layerParams["LAYERNAME"] || layerKey,
             protocol: layerParams["LAYERPROTOCOL"] || "RATTA_RLE",
-            bitmapData
+            bitmapData,
+            totalPath: layerParams["TOTALPATH"] || null
           });
         }
       }
@@ -27585,6 +27587,20 @@ function parseMarkFile(buffer) {
     equipment,
     pages
   };
+}
+function parseTotalPath(totalPath) {
+  if (!totalPath)
+    return null;
+  const parts = totalPath.trim().split(/\s+/);
+  const numbers = parts.filter((p) => /^\d+$/.test(p)).map(Number);
+  if (numbers.length >= 2) {
+    const width = numbers[numbers.length - 2];
+    const height = numbers[numbers.length - 1];
+    if (width > 0 && height > 0) {
+      return { width, height };
+    }
+  }
+  return null;
 }
 function getAnnotationDimensions(equipment) {
   return { width: 1404, height: 1872 };
@@ -27651,7 +27667,14 @@ function renderAnnotationLayer(mark, pageNumber) {
   if (!page || page.layers.length === 0) {
     return null;
   }
-  const dims = getAnnotationDimensions(mark.equipment);
+  let dims = getAnnotationDimensions(mark.equipment);
+  for (const layer of page.layers) {
+    const layerDims = parseTotalPath(layer.totalPath);
+    if (layerDims) {
+      dims = layerDims;
+      break;
+    }
+  }
   const canvas = document.createElement("canvas");
   canvas.width = dims.width;
   canvas.height = dims.height;
@@ -27659,14 +27682,15 @@ function renderAnnotationLayer(mark, pageNumber) {
   for (const layer of page.layers) {
     if (!layer.bitmapData || layer.protocol !== "RATTA_RLE")
       continue;
+    const layerDims = parseTotalPath(layer.totalPath) || dims;
     try {
-      const imageData = decodeRle(layer.bitmapData, dims.width, dims.height);
+      const imageData = decodeRle(layer.bitmapData, layerDims.width, layerDims.height);
       const tempCanvas = document.createElement("canvas");
-      tempCanvas.width = dims.width;
-      tempCanvas.height = dims.height;
+      tempCanvas.width = layerDims.width;
+      tempCanvas.height = layerDims.height;
       const tempCtx = tempCanvas.getContext("2d");
       tempCtx.putImageData(imageData, 0, 0);
-      ctx.drawImage(tempCanvas, 0, 0);
+      ctx.drawImage(tempCanvas, 0, 0, dims.width, dims.height);
     } catch (error) {
       console.error(`Error rendering layer ${layer.name}:`, error);
     }
