@@ -4,6 +4,7 @@
  */
 
 import { MarkFile, MarkPage, getAnnotationDimensions, parseTotalPath } from './mark-parser';
+import { inflate } from 'pako';
 
 // RLE color codes (same as .note files)
 const COLORCODE_BLACK = 0x61;
@@ -118,7 +119,18 @@ export function renderAnnotationLayer(
     const layerDims = parseTotalPath(layer.totalPath) || dims;
 
     try {
-      const imageData = decodeRle(layer.bitmapData, layerDims.width, layerDims.height);
+      // Try to decompress the data first (it might be zlib compressed)
+      let bitmapData = layer.bitmapData;
+      try {
+        const decompressed = inflate(layer.bitmapData);
+        console.log(`[mark-renderer] Decompressed ${layer.bitmapData.length} -> ${decompressed.length} bytes`);
+        bitmapData = decompressed;
+      } catch (e) {
+        // Not compressed, use raw data
+        console.log(`[mark-renderer] Data not compressed, using raw (${layer.bitmapData.length} bytes)`);
+      }
+
+      const imageData = decodeRle(bitmapData, layerDims.width, layerDims.height);
 
       // Create temp canvas for this layer
       const tempCanvas = document.createElement('canvas');
