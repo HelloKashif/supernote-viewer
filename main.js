@@ -32153,8 +32153,27 @@ var AnnotatedPdfView = class extends import_obsidian.FileView {
             const octx = overlayCanvas.getContext("2d");
             if (octx) {
               octx.imageSmoothingEnabled = false;
-              console.log(`[pdf-view] Drawing annotation for page ${pageNum}, size: ${viewport.width}x${viewport.height}`);
-              octx.drawImage(img, 0, 0, viewport.width, viewport.height);
+              const imgAspect = img.width / img.height;
+              const viewAspect = viewport.width / viewport.height;
+              let drawWidth, drawHeight, drawX, drawY;
+              if (Math.abs(imgAspect - viewAspect) < 0.01) {
+                drawWidth = viewport.width;
+                drawHeight = viewport.height;
+                drawX = 0;
+                drawY = 0;
+              } else if (imgAspect < viewAspect) {
+                drawHeight = viewport.height;
+                drawWidth = viewport.height * imgAspect;
+                drawX = (viewport.width - drawWidth) / 2;
+                drawY = 0;
+              } else {
+                drawWidth = viewport.width;
+                drawHeight = viewport.width / imgAspect;
+                drawX = 0;
+                drawY = (viewport.height - drawHeight) / 2;
+              }
+              console.log(`[pdf-view] Drawing annotation for page ${pageNum}: img=${img.width}x${img.height}, viewport=${viewport.width}x${viewport.height}, draw=${drawWidth}x${drawHeight} at (${drawX},${drawY})`);
+              octx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
             }
           };
           img.onerror = (e) => {

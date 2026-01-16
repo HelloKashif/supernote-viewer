@@ -333,8 +333,35 @@ export class AnnotatedPdfView extends FileView {
             if (octx) {
               // Disable image smoothing for crisp scaling (reduces moiré)
               octx.imageSmoothingEnabled = false;
-              console.log(`[pdf-view] Drawing annotation for page ${pageNum}, size: ${viewport.width}x${viewport.height}`);
-              octx.drawImage(img, 0, 0, viewport.width, viewport.height);
+
+              // Calculate scaling to fit while preserving aspect ratio
+              const imgAspect = img.width / img.height;
+              const viewAspect = viewport.width / viewport.height;
+
+              let drawWidth, drawHeight, drawX, drawY;
+
+              if (Math.abs(imgAspect - viewAspect) < 0.01) {
+                // Aspect ratios match closely - fill entire viewport
+                drawWidth = viewport.width;
+                drawHeight = viewport.height;
+                drawX = 0;
+                drawY = 0;
+              } else if (imgAspect < viewAspect) {
+                // Annotation is taller - fit to height, center horizontally
+                drawHeight = viewport.height;
+                drawWidth = viewport.height * imgAspect;
+                drawX = (viewport.width - drawWidth) / 2;
+                drawY = 0;
+              } else {
+                // Annotation is wider - fit to width, center vertically
+                drawWidth = viewport.width;
+                drawHeight = viewport.width / imgAspect;
+                drawX = 0;
+                drawY = (viewport.height - drawHeight) / 2;
+              }
+
+              console.log(`[pdf-view] Drawing annotation for page ${pageNum}: img=${img.width}x${img.height}, viewport=${viewport.width}x${viewport.height}, draw=${drawWidth}x${drawHeight} at (${drawX},${drawY})`);
+              octx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
             }
           };
           img.onerror = (e) => {
