@@ -1,0 +1,292 @@
+/**
+ * PDF Viewer with Supernote annotation overlay
+ * Only activates for PDFs that have associated .mark files
+ */
+
+import { TFile, WorkspaceLeaf, FileView, Menu } from 'obsidian';
+import * as pdfjsLib from 'pdfjs-dist';
+import { parseMarkFile, MarkFile, getAnnotationDimensions } from './mark-parser';
+import { renderAnnotationLayer, annotationToDataUrl, getAnnotatedPageNumbers } from './mark-renderer';
+
+// Set worker path for pdf.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+
+export const VIEW_TYPE_ANNOTATED_PDF = 'supernote-pdf-viewer';
+
+interface AnnotationCache {
+  [pageNum: number]: string; // pageNum -> dataUrl
+}
+
+export class AnnotatedPdfView extends FileView {
+  private viewContent: HTMLElement;
+  private pdfDoc: pdfjsLib.PDFDocumentProxy | null = null;
+  private markFile: MarkFile | null = null;
+  private annotationCache: AnnotationCache = {};
+  private showAnnotations: boolean = true;
+  private currentPage: number = 1;
+  private totalPages: number = 0;
+  private scale: number = 1.5;
+  private renderGeneration: number = 0;
+
+  // DOM elements
+  private toolbar: HTMLElement | null = null;
+  private pagesContainer: HTMLElement | null = null;
+  private pageElements: HTMLElement[] = [];
+  private annotationToggle: HTMLElement | null = null;
+
+  constructor(leaf: WorkspaceLeaf) {
+    super(leaf);
+    this.viewContent = this.containerEl.children[1] as HTMLElement;
+  }
+
+  getViewType(): string {
+    return VIEW_TYPE_ANNOTATED_PDF;
+  }
+
+  getDisplayText(): string {
+    if (this.file) {
+      return `${this.file.basename} (Annotated)`;
+    }
+    return 'Annotated PDF';
+  }
+
+  getIcon(): string {
+    return 'file-text';
+  }
+
+  async onLoadFile(file: TFile): Promise<void> {
+    this.renderGeneration++;
+    const currentGeneration = this.renderGeneration;
+
+    this.clearView();
+
+    // Show loading
+    const loadingEl = this.viewContent.createEl('div', {
+      cls: 'supernote-loading',
+      text: 'Loading PDF...',
+    });
+
+    try {
+      // Load PDF
+      const pdfBuffer = await this.app.vault.readBinary(file);
+      const pdfData = new Uint8Array(pdfBuffer);
+
+      if (currentGeneration !== this.renderGeneration) return;
+
+      this.pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
+      this.totalPages = this.pdfDoc.numPages;
+
+      // Try to load associated .mark file
+      const markPath = file.path + '.mark';
+      const markFile = this.app.vault.getAbstractFileByPath(markPath);
+
+      if (markFile && markFile instanceof TFile) {
+        const markBuffer = await this.app.vault.readBinary(markFile);
+        const markData = new Uint8Array(markBuffer);
+        this.markFile = parseMarkFile(markData);
+
+        // Pre-render annotation layers
+        const annotatedPages = getAnnotatedPageNumbers(this.markFile);
+        for (const pageNum of annotatedPages) {
+          const imageData = renderAnnotationLayer(this.markFile, pageNum);
+          if (imageData) {
+            this.annotationCache[pageNum] = annotationToDataUrl(imageData);
+          }
+        }
+      }
+
+      if (currentGeneration !== this.renderGeneration) return;
+
+      loadingEl.remove();
+
+      // Render UI
+      this.renderToolbar();
+      this.pagesContainer = this.viewContent.createEl('div', { cls: 'annotated-pdf-pages' });
+
+      // Render all pages
+      await this.renderAllPages(currentGeneration);
+
+    } catch (error) {
+      if (currentGeneration !== this.renderGeneration) return;
+      loadingEl.remove();
+      this.viewContent.createEl('div', {
+        cls: 'supernote-error',
+        text: `Error loading PDF: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+      console.error('PDF Viewer error:', error);
+    }
+  }
+
+  private clearView(): void {
+    this.viewContent.empty();
+    this.pdfDoc = null;
+    this.markFile = null;
+    this.annotationCache = {};
+    this.toolbar = null;
+    this.pagesContainer = null;
+    this.pageElements = [];
+    this.annotationToggle = null;
+  }
+
+  private renderToolbar(): void {
+    this.toolbar = this.viewContent.createEl('div', { cls: 'supernote-toolbar' });
+
+    // Annotation toggle (only show if we have a .mark file)
+    if (this.markFile) {
+      const toggleSection = this.toolbar.createEl('div', { cls: 'supernote-toolbar-section' });
+
+      this.annotationToggle = toggleSection.createEl('button', {
+        cls: 'supernote-toolbar-btn clickable-icon',
+        attr: { 'aria-label': 'Toggle annotations' },
+      });
+      this.updateAnnotationToggleIcon();
+      this.annotationToggle.addEventListener('click', () => this.toggleAnnotations());
+
+      toggleSection.createEl('span', {
+        cls: 'supernote-toolbar-label',
+        text: 'Annotations',
+      });
+    }
+
+    // Page info
+    const pageSection = this.toolbar.createEl('div', { cls: 'supernote-toolbar-section' });
+    pageSection.createEl('span', {
+      cls: 'supernote-page-display',
+      text: `${this.totalPages} pages${this.markFile ? ` • ${Object.keys(this.annotationCache).length} annotated` : ''}`,
+    });
+
+    // Zoom controls
+    const zoomSection = this.toolbar.createEl('div', { cls: 'supernote-toolbar-section' });
+
+    const zoomOutBtn = zoomSection.createEl('button', {
+      cls: 'supernote-toolbar-btn clickable-icon',
+      attr: { 'aria-label': 'Zoom out' },
+    });
+    zoomOutBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>';
+    zoomOutBtn.addEventListener('click', () => this.zoomOut());
+
+    const zoomInBtn = zoomSection.createEl('button', {
+      cls: 'supernote-toolbar-btn clickable-icon',
+      attr: { 'aria-label': 'Zoom in' },
+    });
+    zoomInBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>';
+    zoomInBtn.addEventListener('click', () => this.zoomIn());
+  }
+
+  private updateAnnotationToggleIcon(): void {
+    if (!this.annotationToggle) return;
+
+    if (this.showAnnotations) {
+      // Eye icon (annotations visible)
+      this.annotationToggle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    } else {
+      // Eye-off icon (annotations hidden)
+      this.annotationToggle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+    }
+  }
+
+  private toggleAnnotations(): void {
+    this.showAnnotations = !this.showAnnotations;
+    this.updateAnnotationToggleIcon();
+
+    // Toggle visibility of all annotation overlays
+    const overlays = this.viewContent.querySelectorAll('.annotation-overlay');
+    overlays.forEach(overlay => {
+      (overlay as HTMLElement).style.display = this.showAnnotations ? 'block' : 'none';
+    });
+  }
+
+  private async zoomIn(): Promise<void> {
+    if (this.scale < 3) {
+      this.scale += 0.25;
+      await this.reRenderPages();
+    }
+  }
+
+  private async zoomOut(): Promise<void> {
+    if (this.scale > 0.5) {
+      this.scale -= 0.25;
+      await this.reRenderPages();
+    }
+  }
+
+  private async reRenderPages(): Promise<void> {
+    this.renderGeneration++;
+    const currentGeneration = this.renderGeneration;
+
+    if (!this.pagesContainer) return;
+    this.pagesContainer.empty();
+    this.pageElements = [];
+
+    await this.renderAllPages(currentGeneration);
+  }
+
+  private async renderAllPages(generation: number): Promise<void> {
+    if (!this.pdfDoc || !this.pagesContainer) return;
+
+    for (let pageNum = 1; pageNum <= this.totalPages; pageNum++) {
+      if (generation !== this.renderGeneration) return;
+
+      const pageContainer = this.pagesContainer.createEl('div', {
+        cls: 'annotated-pdf-page',
+        attr: { 'data-page': String(pageNum) },
+      });
+      this.pageElements.push(pageContainer);
+
+      try {
+        // Get PDF page
+        const page = await this.pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: this.scale });
+
+        // Create canvas for PDF
+        const pdfCanvas = pageContainer.createEl('canvas', { cls: 'pdf-canvas' });
+        pdfCanvas.width = viewport.width;
+        pdfCanvas.height = viewport.height;
+
+        const ctx = pdfCanvas.getContext('2d')!;
+        await page.render({
+          canvasContext: ctx,
+          viewport: viewport,
+          canvas: pdfCanvas,
+        } as any).promise;
+
+        // Add annotation overlay if exists
+        if (this.annotationCache[pageNum]) {
+          const overlayContainer = pageContainer.createEl('div', { cls: 'annotation-overlay-container' });
+          overlayContainer.style.width = `${viewport.width}px`;
+          overlayContainer.style.height = `${viewport.height}px`;
+
+          const overlay = overlayContainer.createEl('img', {
+            cls: 'annotation-overlay',
+            attr: { src: this.annotationCache[pageNum] },
+          });
+          overlay.style.display = this.showAnnotations ? 'block' : 'none';
+        }
+
+        // Page number indicator
+        pageContainer.createEl('div', {
+          cls: 'pdf-page-number',
+          text: String(pageNum),
+        });
+
+      } catch (error) {
+        pageContainer.createEl('div', {
+          cls: 'supernote-page-error',
+          text: `Error rendering page ${pageNum}`,
+        });
+        console.error(`Error rendering page ${pageNum}:`, error);
+      }
+
+      // Yield for UI updates
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
+  async onUnloadFile(file: TFile): Promise<void> {
+    this.clearView();
+  }
+
+  async onClose(): Promise<void> {
+    this.clearView();
+  }
+}

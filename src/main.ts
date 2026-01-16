@@ -1,6 +1,7 @@
 import { Plugin, TFile, WorkspaceLeaf, FileView, Menu } from 'obsidian';
 import { parseSupernoteFile, SupernoteFile } from './parser';
 import { renderPage, imageDataToDataUrl } from './renderer';
+import { AnnotatedPdfView, VIEW_TYPE_ANNOTATED_PDF } from './pdf-view';
 
 const VIEW_TYPE_SUPERNOTE = 'supernote-viewer';
 
@@ -731,8 +732,14 @@ export default class SupernoteViewerPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadPluginData();
 
+    // Register .note file viewer
     this.registerView(VIEW_TYPE_SUPERNOTE, (leaf) => new SupernoteView(leaf, this));
     this.registerExtensions(['note'], VIEW_TYPE_SUPERNOTE);
+
+    // Register PDF viewer with annotation support
+    this.registerView(VIEW_TYPE_ANNOTATED_PDF, (leaf) => new AnnotatedPdfView(leaf));
+    this.registerExtensions(['pdf'], VIEW_TYPE_ANNOTATED_PDF);
+
     console.log('Supernote Viewer plugin loaded');
   }
 

@@ -3,7 +3,7 @@
   "name": "Supernote Viewer",
   "version": "1.0.0",
   "minAppVersion": "1.0.0",
-  "description": "Simple viewer for Supernote .note files",
+  "description": "Viewer for Supernote .note files and PDF annotations (.mark files)",
   "author": "Kashif",
   "isDesktopOnly": false
 }
