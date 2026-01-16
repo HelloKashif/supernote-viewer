@@ -766,8 +766,14 @@ export default class SupernoteViewerPlugin extends Plugin {
     this.registerView(VIEW_TYPE_ANNOTATED_PDF, (leaf) => new AnnotatedPdfView(leaf));
 
     // Auto-detect PDFs with annotations and open in our viewer
+    // Use active-leaf-change for more reliable detection when switching files
     this.registerEvent(
-      this.app.workspace.on('file-open', (file) => {
+      this.app.workspace.on('active-leaf-change', (leaf) => {
+        if (!leaf) return;
+
+        const viewState = leaf.getViewState();
+        const file = this.app.workspace.getActiveFile();
+
         if (!file || file.extension !== 'pdf') return;
 
         // Check if .mark file exists
@@ -775,12 +781,8 @@ export default class SupernoteViewerPlugin extends Plugin {
         const markFile = this.app.vault.getAbstractFileByPath(markPath);
 
         if (markFile) {
-          // Get the current leaf
-          const leaf = this.app.workspace.getLeaf(false);
-          if (!leaf) return;
-
           // Check if already in our viewer to avoid loops
-          if (leaf.view.getViewType() === VIEW_TYPE_ANNOTATED_PDF) return;
+          if (viewState.type === VIEW_TYPE_ANNOTATED_PDF) return;
 
           // Switch to our annotated PDF viewer
           leaf.setViewState({

@@ -28565,16 +28565,17 @@ var SupernoteViewerPlugin = class extends import_obsidian2.Plugin {
     this.registerExtensions(["note"], VIEW_TYPE_SUPERNOTE);
     this.registerView(VIEW_TYPE_ANNOTATED_PDF, (leaf) => new AnnotatedPdfView(leaf));
     this.registerEvent(
-      this.app.workspace.on("file-open", (file) => {
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (!leaf)
+          return;
+        const viewState = leaf.getViewState();
+        const file = this.app.workspace.getActiveFile();
         if (!file || file.extension !== "pdf")
           return;
         const markPath = file.path + ".mark";
         const markFile = this.app.vault.getAbstractFileByPath(markPath);
         if (markFile) {
-          const leaf = this.app.workspace.getLeaf(false);
-          if (!leaf)
-            return;
-          if (leaf.view.getViewType() === VIEW_TYPE_ANNOTATED_PDF)
+          if (viewState.type === VIEW_TYPE_ANNOTATED_PDF)
             return;
           leaf.setViewState({
             type: VIEW_TYPE_ANNOTATED_PDF,
