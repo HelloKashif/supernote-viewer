@@ -7,18 +7,45 @@ const VIEW_TYPE_SUPERNOTE = 'supernote-viewer';
 type ViewMode = 'single' | 'two-page';
 type FitMode = 'width' | 'height';
 
+interface ViewSettings {
+  viewMode: ViewMode;
+  fitMode: FitMode;
+  zoomLevel: number;
+  showThumbnails: boolean;
+}
+
+interface PluginData {
+  settings: ViewSettings;
+  filePositions: Record<string, number>; // filePath -> pageNumber
+}
+
+const DEFAULT_SETTINGS: ViewSettings = {
+  viewMode: 'single',
+  fitMode: 'width',
+  zoomLevel: 100,
+  showThumbnails: true,
+};
+
+const DEFAULT_DATA: PluginData = {
+  settings: DEFAULT_SETTINGS,
+  filePositions: {},
+};
+
 class SupernoteView extends FileView {
   private viewContent: HTMLElement;
   private currentFile: TFile | null = null;
   private renderedImages: string[] = [];
+  private plugin: SupernoteViewerPlugin;
+  private renderGeneration: number = 0; // For cancelling stale renders
 
-  // View settings
+  // View settings (loaded from plugin)
   private viewMode: ViewMode = 'single';
   private fitMode: FitMode = 'width';
   private zoomLevel: number = 100;
+  private showThumbnails: boolean = true;
+
   private currentPage: number = 1;
   private totalPages: number = 0;
-  private showThumbnails: boolean = true;
 
   // DOM elements
   private pagesContainer: HTMLElement | null = null;
@@ -28,10 +55,45 @@ class SupernoteView extends FileView {
   private thumbnailContainer: HTMLElement | null = null;
   private thumbnailElements: HTMLElement[] = [];
   private mainContainer: HTMLElement | null = null;
+  private scrollObserver: IntersectionObserver | null = null;
 
-  constructor(leaf: WorkspaceLeaf) {
+  constructor(leaf: WorkspaceLeaf, plugin: SupernoteViewerPlugin) {
     super(leaf);
+    this.plugin = plugin;
     this.viewContent = this.containerEl.children[1] as HTMLElement;
+    this.loadSettings();
+  }
+
+  private loadSettings(): void {
+    const settings = this.plugin.getData().settings;
+    this.viewMode = settings.viewMode;
+    this.fitMode = settings.fitMode;
+    this.zoomLevel = settings.zoomLevel;
+    this.showThumbnails = settings.showThumbnails;
+  }
+
+  private async saveSettings(): Promise<void> {
+    const data = this.plugin.getData();
+    data.settings = {
+      viewMode: this.viewMode,
+      fitMode: this.fitMode,
+      zoomLevel: this.zoomLevel,
+      showThumbnails: this.showThumbnails,
+    };
+    await this.plugin.saveData(data);
+  }
+
+  private async saveFilePosition(): Promise<void> {
+    if (!this.file) return;
+    const data = this.plugin.getData();
+    data.filePositions[this.file.path] = this.currentPage;
+    await this.plugin.saveData(data);
+  }
+
+  private loadFilePosition(): number {
+    if (!this.file) return 1;
+    const data = this.plugin.getData();
+    return data.filePositions[this.file.path] || 1;
   }
 
   getViewType(): string {
@@ -43,8 +105,15 @@ class SupernoteView extends FileView {
   }
 
   async onLoadFile(file: TFile): Promise<void> {
+    // Cancel any previous render
+    this.renderGeneration++;
+    const currentGeneration = this.renderGeneration;
+
     this.clearView();
     this.currentFile = file;
+
+    // Load saved page position for this file
+    const savedPage = this.loadFilePosition();
 
     const loadingEl = this.viewContent.createEl('div', {
       cls: 'supernote-loading',
@@ -53,11 +122,18 @@ class SupernoteView extends FileView {
 
     try {
       const buffer = await this.app.vault.readBinary(file);
+
+      // Check if we're still the current render
+      if (currentGeneration !== this.renderGeneration) return;
+
       const data = new Uint8Array(buffer);
       const note = parseSupernoteFile(data);
 
+      // Check again after parsing
+      if (currentGeneration !== this.renderGeneration) return;
+
       this.totalPages = note.pages.length;
-      this.currentPage = 1;
+      this.currentPage = Math.min(savedPage, this.totalPages);
 
       loadingEl.remove();
 
@@ -67,19 +143,35 @@ class SupernoteView extends FileView {
       // Create main layout with sidebar and content
       this.mainContainer = this.viewContent.createEl('div', { cls: 'supernote-main' });
 
-      // Render thumbnail sidebar
-      this.renderThumbnailSidebar(note);
+      // Render thumbnail sidebar (empty initially)
+      this.renderThumbnailSidebar();
 
       // Render pages
-      await this.renderPages(note);
+      await this.renderPages(note, currentGeneration);
+
+      // Check if still current render
+      if (currentGeneration !== this.renderGeneration) return;
 
       // Setup scroll observer
       this.setupScrollObserver();
 
+      // Scroll to saved page position
+      if (this.currentPage > 1) {
+        // Use instant scroll for initial position
+        const pageEl = this.pageElements[this.currentPage - 1];
+        if (pageEl) {
+          pageEl.scrollIntoView({ behavior: 'instant', block: 'start' });
+        }
+      }
+
       // Update initial thumbnail highlight
       this.updateThumbnailHighlight();
 
+      // Populate thumbnails in the background (don't await)
+      this.populateThumbnailsAsync(currentGeneration);
+
     } catch (error) {
+      if (currentGeneration !== this.renderGeneration) return;
       loadingEl.remove();
       this.viewContent.createEl('div', {
         cls: 'supernote-error',
@@ -90,6 +182,12 @@ class SupernoteView extends FileView {
   }
 
   private clearView(): void {
+    // Disconnect observer
+    if (this.scrollObserver) {
+      this.scrollObserver.disconnect();
+      this.scrollObserver = null;
+    }
+
     this.viewContent.empty();
     this.renderedImages = [];
     this.currentFile = null;
@@ -100,8 +198,6 @@ class SupernoteView extends FileView {
     this.thumbnailContainer = null;
     this.thumbnailElements = [];
     this.mainContainer = null;
-    this.zoomLevel = 100;
-    this.currentPage = 1;
   }
 
   private renderToolbar(): void {
@@ -187,7 +283,7 @@ class SupernoteView extends FileView {
     optionsBtn.addEventListener('click', (e) => this.showOptionsMenu(e));
   }
 
-  private renderThumbnailSidebar(note: SupernoteFile): void {
+  private renderThumbnailSidebar(): void {
     if (!this.mainContainer) return;
 
     // Sidebar container
@@ -201,8 +297,6 @@ class SupernoteView extends FileView {
 
     // Thumbnail list
     this.thumbnailContainer = sidebar.createEl('div', { cls: 'supernote-thumbnails' });
-
-    // We'll populate thumbnails after main pages are rendered
   }
 
   private setupResizeHandle(handle: HTMLElement, sidebar: HTMLElement): void {
@@ -237,25 +331,24 @@ class SupernoteView extends FileView {
     if (sidebar) {
       sidebar.toggleClass('hidden', !this.showThumbnails);
     }
+    this.saveSettings();
   }
 
-  private populateThumbnails(): void {
-    if (!this.thumbnailContainer) return;
+  private async populateThumbnailsAsync(generation: number): Promise<void> {
+    if (!this.thumbnailContainer || this.renderedImages.length === 0) return;
 
     this.thumbnailElements = [];
 
-    this.renderedImages.forEach((dataUrl, index) => {
-      const thumbWrapper = this.thumbnailContainer!.createEl('div', {
+    // Create placeholder wrappers immediately for all pages
+    for (let index = 0; index < this.renderedImages.length; index++) {
+      if (generation !== this.renderGeneration) return;
+
+      const thumbWrapper = this.thumbnailContainer.createEl('div', {
         cls: 'supernote-thumbnail-wrapper',
         attr: { 'data-page': String(index + 1) },
       });
 
-      const thumb = thumbWrapper.createEl('img', {
-        cls: 'supernote-thumbnail',
-        attr: { src: dataUrl, alt: `Page ${index + 1}` },
-      });
-
-      const pageNum = thumbWrapper.createEl('div', {
+      thumbWrapper.createEl('div', {
         cls: 'supernote-thumbnail-number',
         text: String(index + 1),
       });
@@ -265,10 +358,35 @@ class SupernoteView extends FileView {
         this.scrollToPage(this.currentPage);
         this.updatePageDisplay();
         this.updateThumbnailHighlight();
+        this.saveFilePosition();
       });
 
       this.thumbnailElements.push(thumbWrapper);
-    });
+    }
+
+    // Update highlight for current page
+    this.updateThumbnailHighlight();
+
+    // Now load images progressively
+    for (let index = 0; index < this.renderedImages.length; index++) {
+      if (generation !== this.renderGeneration) return;
+
+      const dataUrl = this.renderedImages[index];
+      const thumbWrapper = this.thumbnailElements[index];
+
+      if (thumbWrapper && dataUrl) {
+        const thumb = document.createElement('img');
+        thumb.className = 'supernote-thumbnail';
+        thumb.src = dataUrl;
+        thumb.alt = `Page ${index + 1}`;
+        thumbWrapper.insertBefore(thumb, thumbWrapper.firstChild);
+      }
+
+      // Yield to allow UI updates
+      if (index % 5 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
   }
 
   private updateThumbnailHighlight(): void {
@@ -292,6 +410,7 @@ class SupernoteView extends FileView {
       item.onClick(() => {
         this.fitMode = 'width';
         this.applyViewSettings();
+        this.saveSettings();
       });
     });
 
@@ -301,6 +420,7 @@ class SupernoteView extends FileView {
       item.onClick(() => {
         this.fitMode = 'height';
         this.applyViewSettings();
+        this.saveSettings();
       });
     });
 
@@ -312,6 +432,7 @@ class SupernoteView extends FileView {
       item.onClick(() => {
         this.viewMode = 'single';
         this.applyViewSettings();
+        this.saveSettings();
       });
     });
 
@@ -321,6 +442,7 @@ class SupernoteView extends FileView {
       item.onClick(() => {
         this.viewMode = 'two-page';
         this.applyViewSettings();
+        this.saveSettings();
       });
     });
 
@@ -333,6 +455,7 @@ class SupernoteView extends FileView {
       this.scrollToPage(this.currentPage);
       this.updatePageDisplay();
       this.updateThumbnailHighlight();
+      this.saveFilePosition();
     }
   }
 
@@ -342,6 +465,7 @@ class SupernoteView extends FileView {
       this.scrollToPage(this.currentPage);
       this.updatePageDisplay();
       this.updateThumbnailHighlight();
+      this.saveFilePosition();
     }
   }
 
@@ -366,6 +490,7 @@ class SupernoteView extends FileView {
       this.currentPage = value;
       this.scrollToPage(this.currentPage);
       this.updateThumbnailHighlight();
+      this.saveFilePosition();
     } else {
       // Reset to current page if invalid
       this.pageInput.value = String(this.currentPage);
@@ -376,6 +501,7 @@ class SupernoteView extends FileView {
     if (this.zoomLevel < 200) {
       this.zoomLevel += 25;
       this.applyZoom();
+      this.saveSettings();
     }
   }
 
@@ -383,6 +509,7 @@ class SupernoteView extends FileView {
     if (this.zoomLevel > 50) {
       this.zoomLevel -= 25;
       this.applyZoom();
+      this.saveSettings();
     }
   }
 
@@ -405,7 +532,12 @@ class SupernoteView extends FileView {
   private setupScrollObserver(): void {
     if (!this.pagesContainer) return;
 
-    const observer = new IntersectionObserver(
+    // Disconnect previous observer if exists
+    if (this.scrollObserver) {
+      this.scrollObserver.disconnect();
+    }
+
+    this.scrollObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
@@ -414,6 +546,8 @@ class SupernoteView extends FileView {
               this.currentPage = pageIndex + 1;
               this.updatePageDisplay();
               this.updateThumbnailHighlight();
+              // Debounce saving position to avoid too many writes
+              this.debouncedSavePosition();
             }
           }
         }
@@ -424,10 +558,20 @@ class SupernoteView extends FileView {
       }
     );
 
-    this.pageElements.forEach((el) => observer.observe(el));
+    this.pageElements.forEach((el) => this.scrollObserver?.observe(el));
   }
 
-  private async renderPages(note: SupernoteFile): Promise<void> {
+  private savePositionTimeout: number | null = null;
+  private debouncedSavePosition(): void {
+    if (this.savePositionTimeout) {
+      window.clearTimeout(this.savePositionTimeout);
+    }
+    this.savePositionTimeout = window.setTimeout(() => {
+      this.saveFilePosition();
+    }, 500);
+  }
+
+  private async renderPages(note: SupernoteFile, generation: number): Promise<void> {
     if (!this.mainContainer) return;
 
     // Content area
@@ -439,9 +583,8 @@ class SupernoteView extends FileView {
     this.pagesContainer.style.setProperty('--zoom-level', `${this.zoomLevel}%`);
 
     for (let i = 0; i < note.pages.length; i++) {
-      if (this.currentFile !== this.file) {
-        return;
-      }
+      // Check if this render is still current
+      if (generation !== this.renderGeneration) return;
 
       const pageContainer = this.pagesContainer.createEl('div', { cls: 'supernote-page' });
       this.pageElements.push(pageContainer);
@@ -471,30 +614,54 @@ class SupernoteView extends FileView {
         console.error(`Error rendering page ${i + 1}:`, error);
       }
 
+      // Yield to allow UI updates and check cancellation
       await new Promise(resolve => setTimeout(resolve, 0));
     }
-
-    // Populate thumbnails after all pages are rendered
-    this.populateThumbnails();
   }
 
   async onUnloadFile(file: TFile): Promise<void> {
+    // Save position before unloading
+    await this.saveFilePosition();
     this.clearView();
   }
 
   async onClose(): Promise<void> {
+    await this.saveFilePosition();
     this.clearView();
   }
 }
 
 export default class SupernoteViewerPlugin extends Plugin {
+  private data: PluginData = DEFAULT_DATA;
+
   async onload(): Promise<void> {
-    this.registerView(VIEW_TYPE_SUPERNOTE, (leaf) => new SupernoteView(leaf));
+    await this.loadPluginData();
+
+    this.registerView(VIEW_TYPE_SUPERNOTE, (leaf) => new SupernoteView(leaf, this));
     this.registerExtensions(['note'], VIEW_TYPE_SUPERNOTE);
     console.log('Supernote Viewer plugin loaded');
   }
 
   onunload(): void {
     console.log('Supernote Viewer plugin unloaded');
+  }
+
+  private async loadPluginData(): Promise<void> {
+    const loaded = await this.loadData();
+    if (loaded) {
+      this.data = {
+        settings: { ...DEFAULT_SETTINGS, ...loaded.settings },
+        filePositions: loaded.filePositions || {},
+      };
+    }
+  }
+
+  getData(): PluginData {
+    return this.data;
+  }
+
+  async saveData(data: PluginData): Promise<void> {
+    this.data = data;
+    await super.saveData(data);
   }
 }
