@@ -27704,6 +27704,9 @@ var AnnotatedPdfView = class extends import_obsidian.FileView {
     this.pagesContainer = null;
     this.pageElements = [];
     this.annotationToggle = null;
+    this.annotationNavDisplay = null;
+    // Annotation navigation
+    this.annotatedPages = [];
     this.viewContent = this.containerEl.children[1];
   }
   getViewType() {
@@ -27739,13 +27742,15 @@ var AnnotatedPdfView = class extends import_obsidian.FileView {
         const markBuffer = await this.app.vault.readBinary(markFile);
         const markData = new Uint8Array(markBuffer);
         this.markFile = parseMarkFile(markData);
-        const annotatedPages = getAnnotatedPageNumbers(this.markFile);
-        for (const pageNum of annotatedPages) {
+        const annotatedPageNums = getAnnotatedPageNumbers(this.markFile);
+        for (const pageNum of annotatedPageNums) {
           const imageData = renderAnnotationLayer(this.markFile, pageNum);
           if (imageData) {
             this.annotationCache[pageNum] = annotationToDataUrl(imageData);
+            this.annotatedPages.push(pageNum);
           }
         }
+        this.annotatedPages.sort((a, b) => a - b);
       }
       if (currentGeneration !== this.renderGeneration)
         return;
@@ -27773,26 +27778,40 @@ var AnnotatedPdfView = class extends import_obsidian.FileView {
     this.pagesContainer = null;
     this.pageElements = [];
     this.annotationToggle = null;
+    this.annotationNavDisplay = null;
+    this.annotatedPages = [];
   }
   renderToolbar() {
     this.toolbar = this.viewContent.createEl("div", { cls: "supernote-toolbar" });
-    if (this.markFile) {
-      const toggleSection = this.toolbar.createEl("div", { cls: "supernote-toolbar-section" });
-      this.annotationToggle = toggleSection.createEl("button", {
+    if (this.markFile && this.annotatedPages.length > 0) {
+      const annotationSection = this.toolbar.createEl("div", { cls: "supernote-toolbar-section" });
+      this.annotationToggle = annotationSection.createEl("button", {
         cls: "supernote-toolbar-btn clickable-icon",
         attr: { "aria-label": "Toggle annotations" }
       });
       this.updateAnnotationToggleIcon();
       this.annotationToggle.addEventListener("click", () => this.toggleAnnotations());
-      toggleSection.createEl("span", {
+      const prevBtn = annotationSection.createEl("button", {
+        cls: "supernote-toolbar-btn clickable-icon",
+        attr: { "aria-label": "Previous annotation" }
+      });
+      prevBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+      prevBtn.addEventListener("click", () => this.goToPrevAnnotation());
+      const nextBtn = annotationSection.createEl("button", {
+        cls: "supernote-toolbar-btn clickable-icon",
+        attr: { "aria-label": "Next annotation" }
+      });
+      nextBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+      nextBtn.addEventListener("click", () => this.goToNextAnnotation());
+      this.annotationNavDisplay = annotationSection.createEl("span", {
         cls: "supernote-toolbar-label",
-        text: "Annotations"
+        text: `${this.annotatedPages.length} annotated`
       });
     }
     const pageSection = this.toolbar.createEl("div", { cls: "supernote-toolbar-section" });
     pageSection.createEl("span", {
       cls: "supernote-page-display",
-      text: `${this.totalPages} pages${this.markFile ? ` \u2022 ${Object.keys(this.annotationCache).length} annotated` : ""}`
+      text: `${this.totalPages} pages`
     });
     const zoomSection = this.toolbar.createEl("div", { cls: "supernote-toolbar-section" });
     const zoomOutBtn = zoomSection.createEl("button", {
@@ -27824,6 +27843,33 @@ var AnnotatedPdfView = class extends import_obsidian.FileView {
     overlays.forEach((overlay) => {
       overlay.style.display = this.showAnnotations ? "block" : "none";
     });
+  }
+  goToNextAnnotation() {
+    if (this.annotatedPages.length === 0)
+      return;
+    const nextPage = this.annotatedPages.find((p) => p > this.currentPage);
+    if (nextPage) {
+      this.scrollToPage(nextPage);
+    } else {
+      this.scrollToPage(this.annotatedPages[0]);
+    }
+  }
+  goToPrevAnnotation() {
+    if (this.annotatedPages.length === 0)
+      return;
+    const prevPages = this.annotatedPages.filter((p) => p < this.currentPage);
+    if (prevPages.length > 0) {
+      this.scrollToPage(prevPages[prevPages.length - 1]);
+    } else {
+      this.scrollToPage(this.annotatedPages[this.annotatedPages.length - 1]);
+    }
+  }
+  scrollToPage(pageNum) {
+    this.currentPage = pageNum;
+    const pageEl = this.pageElements[pageNum - 1];
+    if (pageEl) {
+      pageEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
   async zoomIn() {
     if (this.scale < 3) {

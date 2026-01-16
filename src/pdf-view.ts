@@ -33,6 +33,10 @@ export class AnnotatedPdfView extends FileView {
   private pagesContainer: HTMLElement | null = null;
   private pageElements: HTMLElement[] = [];
   private annotationToggle: HTMLElement | null = null;
+  private annotationNavDisplay: HTMLElement | null = null;
+
+  // Annotation navigation
+  private annotatedPages: number[] = [];
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -86,13 +90,16 @@ export class AnnotatedPdfView extends FileView {
         this.markFile = parseMarkFile(markData);
 
         // Pre-render annotation layers
-        const annotatedPages = getAnnotatedPageNumbers(this.markFile);
-        for (const pageNum of annotatedPages) {
+        const annotatedPageNums = getAnnotatedPageNumbers(this.markFile);
+        for (const pageNum of annotatedPageNums) {
           const imageData = renderAnnotationLayer(this.markFile, pageNum);
           if (imageData) {
             this.annotationCache[pageNum] = annotationToDataUrl(imageData);
+            this.annotatedPages.push(pageNum);
           }
         }
+        // Sort annotated pages
+        this.annotatedPages.sort((a, b) => a - b);
       }
 
       if (currentGeneration !== this.renderGeneration) return;
@@ -126,25 +133,45 @@ export class AnnotatedPdfView extends FileView {
     this.pagesContainer = null;
     this.pageElements = [];
     this.annotationToggle = null;
+    this.annotationNavDisplay = null;
+    this.annotatedPages = [];
   }
 
   private renderToolbar(): void {
     this.toolbar = this.viewContent.createEl('div', { cls: 'supernote-toolbar' });
 
-    // Annotation toggle (only show if we have a .mark file)
-    if (this.markFile) {
-      const toggleSection = this.toolbar.createEl('div', { cls: 'supernote-toolbar-section' });
+    // Annotation controls (only show if we have annotations)
+    if (this.markFile && this.annotatedPages.length > 0) {
+      const annotationSection = this.toolbar.createEl('div', { cls: 'supernote-toolbar-section' });
 
-      this.annotationToggle = toggleSection.createEl('button', {
+      // Toggle button
+      this.annotationToggle = annotationSection.createEl('button', {
         cls: 'supernote-toolbar-btn clickable-icon',
         attr: { 'aria-label': 'Toggle annotations' },
       });
       this.updateAnnotationToggleIcon();
       this.annotationToggle.addEventListener('click', () => this.toggleAnnotations());
 
-      toggleSection.createEl('span', {
+      // Previous annotation button
+      const prevBtn = annotationSection.createEl('button', {
+        cls: 'supernote-toolbar-btn clickable-icon',
+        attr: { 'aria-label': 'Previous annotation' },
+      });
+      prevBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+      prevBtn.addEventListener('click', () => this.goToPrevAnnotation());
+
+      // Next annotation button
+      const nextBtn = annotationSection.createEl('button', {
+        cls: 'supernote-toolbar-btn clickable-icon',
+        attr: { 'aria-label': 'Next annotation' },
+      });
+      nextBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+      nextBtn.addEventListener('click', () => this.goToNextAnnotation());
+
+      // Annotation count display
+      this.annotationNavDisplay = annotationSection.createEl('span', {
         cls: 'supernote-toolbar-label',
-        text: 'Annotations',
+        text: `${this.annotatedPages.length} annotated`,
       });
     }
 
@@ -152,7 +179,7 @@ export class AnnotatedPdfView extends FileView {
     const pageSection = this.toolbar.createEl('div', { cls: 'supernote-toolbar-section' });
     pageSection.createEl('span', {
       cls: 'supernote-page-display',
-      text: `${this.totalPages} pages${this.markFile ? ` • ${Object.keys(this.annotationCache).length} annotated` : ''}`,
+      text: `${this.totalPages} pages`,
     });
 
     // Zoom controls
@@ -194,6 +221,40 @@ export class AnnotatedPdfView extends FileView {
     overlays.forEach(overlay => {
       (overlay as HTMLElement).style.display = this.showAnnotations ? 'block' : 'none';
     });
+  }
+
+  private goToNextAnnotation(): void {
+    if (this.annotatedPages.length === 0) return;
+
+    // Find the next annotated page after current position
+    const nextPage = this.annotatedPages.find(p => p > this.currentPage);
+    if (nextPage) {
+      this.scrollToPage(nextPage);
+    } else {
+      // Wrap around to first annotated page
+      this.scrollToPage(this.annotatedPages[0]);
+    }
+  }
+
+  private goToPrevAnnotation(): void {
+    if (this.annotatedPages.length === 0) return;
+
+    // Find the previous annotated page before current position
+    const prevPages = this.annotatedPages.filter(p => p < this.currentPage);
+    if (prevPages.length > 0) {
+      this.scrollToPage(prevPages[prevPages.length - 1]);
+    } else {
+      // Wrap around to last annotated page
+      this.scrollToPage(this.annotatedPages[this.annotatedPages.length - 1]);
+    }
+  }
+
+  private scrollToPage(pageNum: number): void {
+    this.currentPage = pageNum;
+    const pageEl = this.pageElements[pageNum - 1];
+    if (pageEl) {
+      pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   private async zoomIn(): Promise<void> {
