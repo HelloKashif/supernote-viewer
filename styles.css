@@ -355,6 +355,8 @@ body.supernote-resizing * {
   width: 100%;
   height: 100%;
   object-fit: fill;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 .pdf-page-number {
