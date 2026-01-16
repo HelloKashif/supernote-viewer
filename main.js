@@ -31862,6 +31862,8 @@ function renderAnnotationLayer(mark, pageNumber) {
       } catch (e) {
         console.log(`[mark-renderer] Data not compressed, using raw (${layer.bitmapData.length} bytes)`);
       }
+      const preview = Array.from(bitmapData.slice(0, 20)).map((b) => b.toString(16).padStart(2, "0")).join(" ");
+      console.log(`[mark-renderer] First 20 bytes: ${preview}`);
       const imageData = decodeRle(bitmapData, layerDims.width, layerDims.height);
       const tempCanvas = document.createElement("canvas");
       tempCanvas.width = layerDims.width;

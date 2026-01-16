@@ -130,6 +130,10 @@ export function renderAnnotationLayer(
         console.log(`[mark-renderer] Data not compressed, using raw (${layer.bitmapData.length} bytes)`);
       }
 
+      // Debug: show first 20 bytes of bitmap data
+      const preview = Array.from(bitmapData.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      console.log(`[mark-renderer] First 20 bytes: ${preview}`);
+
       const imageData = decodeRle(bitmapData, layerDims.width, layerDims.height);
 
       // Create temp canvas for this layer
