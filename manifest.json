@@ -1,9 +1,9 @@
 {
-  "id": "supernote-viewer",
-  "name": "Supernote Viewer",
+  "id": "obsidian-supernote",
+  "name": "Supernote",
   "version": "1.0.0",
   "minAppVersion": "1.0.0",
-  "description": "View and navigate Supernote .note files directly in Obsidian with thumbnails, zoom, and dark mode support",
+  "description": "View and navigate Supernote .note files with thumbnails, zoom, and dark mode support.",
   "author": "Kashif",
   "authorUrl": "https://github.com/HelloKashif",
   "isDesktopOnly": false

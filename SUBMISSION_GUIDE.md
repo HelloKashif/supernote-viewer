@@ -1,6 +1,6 @@
 # Obsidian Community Plugin Submission Guide
 
-This guide explains how to submit Supernote Viewer to the Obsidian community plugins directory.
+This guide explains how to submit Supernote to the Obsidian community plugins directory.
 
 ## Prerequisites
 
@@ -25,11 +25,11 @@ Your `manifest.json` must include:
 
 ```json
 {
-  "id": "supernote-viewer",
-  "name": "Supernote Viewer",
+  "id": "obsidian-supernote",
+  "name": "Supernote",
   "version": "1.0.0",
   "minAppVersion": "1.0.0",
-  "description": "View and navigate Supernote .note files directly in Obsidian with thumbnails, zoom, and dark mode support",
+  "description": "View and navigate Supernote .note files with thumbnails, zoom, and dark mode support.",
   "author": "Kashif",
   "authorUrl": "https://github.com/HelloKashif",
   "isDesktopOnly": false
@@ -87,11 +87,11 @@ This means plugin version 1.0.0 requires Obsidian 1.0.0 or higher.
 
    ```json
    {
-     "id": "supernote-viewer",
-     "name": "Supernote Viewer",
+     "id": "obsidian-supernote",
+     "name": "Supernote",
      "author": "Kashif",
-     "description": "View and navigate Supernote .note files directly in Obsidian with thumbnails, zoom, and dark mode support",
-     "repo": "HelloKashif/supernote-viewer"
+     "description": "View and navigate Supernote .note files with thumbnails, zoom, and dark mode support.",
+     "repo": "HelloKashif/obsidian-supernote"
    }
    ```
 

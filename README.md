@@ -1,11 +1,25 @@
-# Supernote Viewer for Obsidian
+# Supernote for Obsidian
 
 View your Supernote handwritten notes directly in Obsidian. No conversion needed, no external apps required.
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-v1.0.0+-purple)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-## Why Supernote Viewer?
+## Screenshots
+
+### Two-Page View (Light Mode)
+![Two-page view showing handwritten notes](images/img-1.jpg)
+
+### Thumbnail Sidebar Navigation
+![Thumbnail sidebar for easy page navigation](images/thumbnail-sidebar.jpg)
+
+### Dark Mode with Adapt to Theme
+![Dark mode with theme adaptation](images/adapt-to-theme.jpg)
+
+### Full View with Sidebar (Dark Mode)
+![Full interface with thumbnail sidebar in dark mode](images/img-2.jpg)
+
+## Why Supernote?
 
 If you own a Supernote device and use Obsidian for knowledge management, you've probably faced the challenge of integrating your handwritten notes with your digital vault. Until now, you had to:
 
@@ -13,7 +27,7 @@ If you own a Supernote device and use Obsidian for knowledge management, you've 
 - Take screenshots (poor quality, manual process)
 - Use separate apps to view your notes
 
-**Supernote Viewer solves this.** It renders `.note` files natively inside Obsidian, making your handwritten notes first-class citizens in your vault.
+**Supernote solves this.** It renders `.note` files natively inside Obsidian, making your handwritten notes first-class citizens in your vault.
 
 ## Features
 
@@ -55,16 +69,16 @@ When you sync updated notes from your Supernote (via Supernote Cloud, Dropbox, o
 
 1. Open Obsidian Settings
 2. Go to **Community Plugins** and disable **Restricted Mode**
-3. Click **Browse** and search for "Supernote Viewer"
+3. Click **Browse** and search for "Supernote"
 4. Click **Install**, then **Enable**
 
 ### Manual Installation
 
-1. Download the latest release from the [Releases page](https://github.com/HelloKashif/supernote-viewer/releases):
+1. Download the latest release from the [Releases page](https://github.com/HelloKashif/obsidian-supernote/releases):
    - `main.js`
    - `manifest.json`
    - `styles.css`
-2. Create a folder called `supernote-viewer` in your vault's `.obsidian/plugins/` directory
+2. Create a folder called `obsidian-supernote` in your vault's `.obsidian/plugins/` directory
 3. Copy the downloaded files into this folder
 4. Restart Obsidian
 5. Enable the plugin in Settings → Community Plugins
@@ -72,13 +86,13 @@ When you sync updated notes from your Supernote (via Supernote Cloud, Dropbox, o
 ### From Source
 
 ```bash
-git clone https://github.com/HelloKashif/supernote-viewer.git
-cd supernote-viewer
+git clone https://github.com/HelloKashif/obsidian-supernote.git
+cd obsidian-supernote
 npm install
 npm run build
 ```
 
-Copy `main.js`, `manifest.json`, and `styles.css` to your vault's `.obsidian/plugins/supernote-viewer/` folder.
+Copy `main.js`, `manifest.json`, and `styles.css` to your vault's `.obsidian/plugins/obsidian-supernote/` folder.
 
 ## Usage
 
@@ -164,7 +178,7 @@ Drag the right edge of the thumbnail sidebar to resize it. The sidebar can be an
 
 ### Plugin doesn't load
 - Ensure you have all three files: `main.js`, `manifest.json`, `styles.css`
-- Check that they're in `.obsidian/plugins/supernote-viewer/`
+- Check that they're in `.obsidian/plugins/obsidian-supernote/`
 - Try disabling and re-enabling the plugin
 - Restart Obsidian
 
@@ -194,8 +208,8 @@ Contributions are welcome! Here's how you can help:
 ### Development Setup
 
 ```bash
-git clone https://github.com/HelloKashif/supernote-viewer.git
-cd supernote-viewer
+git clone https://github.com/HelloKashif/obsidian-supernote.git
+cd obsidian-supernote
 npm install
 npm run dev  # Watch mode for development
 ```
@@ -203,7 +217,7 @@ npm run dev  # Watch mode for development
 ### Project Structure
 
 ```
-supernote-viewer/
+obsidian-supernote/
 ├── src/
 │   ├── main.ts      # Plugin entry point and view implementation
 │   ├── parser.ts    # .note file format parser

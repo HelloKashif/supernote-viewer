@@ -1,7 +1,7 @@
 {
-  "name": "supernote-viewer",
+  "name": "obsidian-supernote",
   "version": "1.0.0",
-  "description": "Simple Supernote .note file viewer for Obsidian",
+  "description": "Supernote plugin for Obsidian - view and manage .note files",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
