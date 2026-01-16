@@ -22,6 +22,7 @@ const COLORCODE_MARKER_GRAY_X2 = 0xca;
 
 const SPECIAL_LENGTH_MARKER = 0xff;
 const SPECIAL_LENGTH = 0x4000;
+const HIGH_BIT_FLAG = 0x80;
 
 // Color mapping: [R, G, B, A]
 // For annotations, we want transparent background
@@ -39,7 +40,8 @@ const ANNOTATION_COLORS: Record<number, [number, number, number, number]> = {
 };
 
 function decodeRle(data: Uint8Array, width: number, height: number): ImageData {
-  const pixels = new Uint8ClampedArray(width * height * 4);
+  const totalPixels = width * height;
+  const pixels = new Uint8ClampedArray(totalPixels * 4);
   let pixelIndex = 0;
   let dataIndex = 0;
 
@@ -51,19 +53,41 @@ function decodeRle(data: Uint8Array, width: number, height: number): ImageData {
     pixels[i + 3] = 0;
   }
 
-  while (dataIndex < data.length && pixelIndex < width * height) {
+  let heldLength = 0;
+  let heldColor = 0;
+  let hasHeld = false;
+
+  while (dataIndex < data.length && pixelIndex < totalPixels) {
     const colorCode = data[dataIndex++];
     if (dataIndex >= data.length) break;
 
-    let length = data[dataIndex++];
+    let lengthByte = data[dataIndex++];
+    let length: number;
 
-    if (length === SPECIAL_LENGTH_MARKER) {
+    if (lengthByte === SPECIAL_LENGTH_MARKER) {
+      // Special marker: use large length
       length = SPECIAL_LENGTH;
+    } else if ((lengthByte & HIGH_BIT_FLAG) !== 0) {
+      // High bit set: combine with next same-color run
+      // Hold this and combine with next
+      heldLength = lengthByte & 0x7f;
+      heldColor = colorCode;
+      hasHeld = true;
+      continue;
+    } else {
+      // Normal length: value + 1
+      length = lengthByte + 1;
+    }
+
+    // Check if we have a held length to combine
+    if (hasHeld && colorCode === heldColor) {
+      length = 1 + length + ((heldLength + 1) << 7);
+      hasHeld = false;
     }
 
     const color = ANNOTATION_COLORS[colorCode] || [255, 0, 255, 255]; // Magenta for unknown
 
-    for (let i = 0; i < length && pixelIndex < width * height; i++) {
+    for (let i = 0; i < length && pixelIndex < totalPixels; i++) {
       const idx = pixelIndex * 4;
       pixels[idx] = color[0];
       pixels[idx + 1] = color[1];
@@ -73,6 +97,7 @@ function decodeRle(data: Uint8Array, width: number, height: number): ImageData {
     }
   }
 
+  console.log(`[mark-renderer] Decoded ${pixelIndex} pixels, expected ${totalPixels}`);
   return new ImageData(pixels, width, height);
 }
 

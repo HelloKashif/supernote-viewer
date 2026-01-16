@@ -31785,6 +31785,7 @@ var COLORCODE_MARKER_DARK_GRAY_X2 = 158;
 var COLORCODE_MARKER_GRAY_X2 = 202;
 var SPECIAL_LENGTH_MARKER2 = 255;
 var SPECIAL_LENGTH2 = 16384;
+var HIGH_BIT_FLAG = 128;
 var ANNOTATION_COLORS = {
   [COLORCODE_BLACK]: [0, 0, 0, 255],
   [COLORCODE_BACKGROUND]: [0, 0, 0, 0],
@@ -31799,7 +31800,8 @@ var ANNOTATION_COLORS = {
   [COLORCODE_MARKER_GRAY_X2]: [180, 180, 180, 150]
 };
 function decodeRle(data, width, height) {
-  const pixels = new Uint8ClampedArray(width * height * 4);
+  const totalPixels = width * height;
+  const pixels = new Uint8ClampedArray(totalPixels * 4);
   let pixelIndex = 0;
   let dataIndex = 0;
   for (let i = 0; i < pixels.length; i += 4) {
@@ -31808,16 +31810,31 @@ function decodeRle(data, width, height) {
     pixels[i + 2] = 0;
     pixels[i + 3] = 0;
   }
-  while (dataIndex < data.length && pixelIndex < width * height) {
+  let heldLength = 0;
+  let heldColor = 0;
+  let hasHeld = false;
+  while (dataIndex < data.length && pixelIndex < totalPixels) {
     const colorCode = data[dataIndex++];
     if (dataIndex >= data.length)
       break;
-    let length = data[dataIndex++];
-    if (length === SPECIAL_LENGTH_MARKER2) {
+    let lengthByte = data[dataIndex++];
+    let length;
+    if (lengthByte === SPECIAL_LENGTH_MARKER2) {
       length = SPECIAL_LENGTH2;
+    } else if ((lengthByte & HIGH_BIT_FLAG) !== 0) {
+      heldLength = lengthByte & 127;
+      heldColor = colorCode;
+      hasHeld = true;
+      continue;
+    } else {
+      length = lengthByte + 1;
+    }
+    if (hasHeld && colorCode === heldColor) {
+      length = 1 + length + (heldLength + 1 << 7);
+      hasHeld = false;
     }
     const color = ANNOTATION_COLORS[colorCode] || [255, 0, 255, 255];
-    for (let i = 0; i < length && pixelIndex < width * height; i++) {
+    for (let i = 0; i < length && pixelIndex < totalPixels; i++) {
       const idx = pixelIndex * 4;
       pixels[idx] = color[0];
       pixels[idx + 1] = color[1];
@@ -31826,6 +31843,7 @@ function decodeRle(data, width, height) {
       pixelIndex++;
     }
   }
+  console.log(`[mark-renderer] Decoded ${pixelIndex} pixels, expected ${totalPixels}`);
   return new ImageData(pixels, width, height);
 }
 function renderAnnotationLayer(mark, pageNumber) {
