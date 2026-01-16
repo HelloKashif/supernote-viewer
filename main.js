@@ -27973,7 +27973,8 @@ var DEFAULT_SETTINGS = {
   viewMode: "single",
   fitMode: "width",
   zoomLevel: 100,
-  showThumbnails: true
+  showThumbnails: true,
+  adaptToTheme: true
 };
 var DEFAULT_DATA = {
   settings: DEFAULT_SETTINGS,
@@ -27993,6 +27994,7 @@ var SupernoteView = class extends import_obsidian2.FileView {
     this.fitMode = "width";
     this.zoomLevel = 100;
     this.showThumbnails = true;
+    this.adaptToTheme = true;
     this.currentPage = 1;
     this.totalPages = 0;
     // DOM elements
@@ -28021,11 +28023,13 @@ var SupernoteView = class extends import_obsidian2.FileView {
     this.app.vault.on("modify", this.fileChangeHandler);
   }
   loadSettings() {
+    var _a2;
     const settings = this.plugin.getData().settings;
     this.viewMode = settings.viewMode;
     this.fitMode = settings.fitMode;
     this.zoomLevel = settings.zoomLevel;
     this.showThumbnails = settings.showThumbnails;
+    this.adaptToTheme = (_a2 = settings.adaptToTheme) != null ? _a2 : true;
   }
   async saveSettings() {
     const data = this.plugin.getData();
@@ -28033,7 +28037,8 @@ var SupernoteView = class extends import_obsidian2.FileView {
       viewMode: this.viewMode,
       fitMode: this.fitMode,
       zoomLevel: this.zoomLevel,
-      showThumbnails: this.showThumbnails
+      showThumbnails: this.showThumbnails,
+      adaptToTheme: this.adaptToTheme
     };
     await this.plugin.saveData(data);
   }
@@ -28070,6 +28075,7 @@ var SupernoteView = class extends import_obsidian2.FileView {
       this.currentPage = Math.min(savedPage, this.totalPages);
       this.renderToolbar();
       this.mainContainer = this.viewContent.createEl("div", { cls: "supernote-main" });
+      this.applyThemeAdaptation();
       this.renderThumbnailSidebar();
       this.renderPagesFromCache(currentGeneration);
       if (currentGeneration !== this.renderGeneration)
@@ -28102,6 +28108,7 @@ var SupernoteView = class extends import_obsidian2.FileView {
       loadingEl.remove();
       this.renderToolbar();
       this.mainContainer = this.viewContent.createEl("div", { cls: "supernote-main" });
+      this.applyThemeAdaptation();
       this.renderThumbnailSidebar();
       await this.renderPages(note, currentGeneration);
       if (currentGeneration !== this.renderGeneration)
@@ -28363,7 +28370,22 @@ var SupernoteView = class extends import_obsidian2.FileView {
         this.saveSettings();
       });
     });
+    menu.addSeparator();
+    menu.addItem((item) => {
+      item.setTitle("Adapt to theme");
+      item.setChecked(this.adaptToTheme);
+      item.onClick(() => {
+        this.adaptToTheme = !this.adaptToTheme;
+        this.applyThemeAdaptation();
+        this.saveSettings();
+      });
+    });
     menu.showAtMouseEvent(e);
+  }
+  applyThemeAdaptation() {
+    if (this.mainContainer) {
+      this.mainContainer.toggleClass("no-theme-adapt", !this.adaptToTheme);
+    }
   }
   goToPrevPage() {
     if (this.currentPage > 1) {

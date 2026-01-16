@@ -13,6 +13,7 @@ interface ViewSettings {
   fitMode: FitMode;
   zoomLevel: number;
   showThumbnails: boolean;
+  adaptToTheme: boolean;
 }
 
 interface PluginData {
@@ -25,6 +26,7 @@ const DEFAULT_SETTINGS: ViewSettings = {
   fitMode: 'width',
   zoomLevel: 100,
   showThumbnails: true,
+  adaptToTheme: true,
 };
 
 const DEFAULT_DATA: PluginData = {
@@ -54,6 +56,7 @@ class SupernoteView extends FileView {
   private fitMode: FitMode = 'width';
   private zoomLevel: number = 100;
   private showThumbnails: boolean = true;
+  private adaptToTheme: boolean = true;
 
   private currentPage: number = 1;
   private totalPages: number = 0;
@@ -95,6 +98,7 @@ class SupernoteView extends FileView {
     this.fitMode = settings.fitMode;
     this.zoomLevel = settings.zoomLevel;
     this.showThumbnails = settings.showThumbnails;
+    this.adaptToTheme = settings.adaptToTheme ?? true;
   }
 
   private async saveSettings(): Promise<void> {
@@ -104,6 +108,7 @@ class SupernoteView extends FileView {
       fitMode: this.fitMode,
       zoomLevel: this.zoomLevel,
       showThumbnails: this.showThumbnails,
+      adaptToTheme: this.adaptToTheme,
     };
     await this.plugin.saveData(data);
   }
@@ -151,6 +156,7 @@ class SupernoteView extends FileView {
 
       this.renderToolbar();
       this.mainContainer = this.viewContent.createEl('div', { cls: 'supernote-main' });
+      this.applyThemeAdaptation();
       this.renderThumbnailSidebar();
       this.renderPagesFromCache(currentGeneration);
 
@@ -198,6 +204,7 @@ class SupernoteView extends FileView {
 
       // Create main layout with sidebar and content
       this.mainContainer = this.viewContent.createEl('div', { cls: 'supernote-main' });
+      this.applyThemeAdaptation();
 
       // Render thumbnail sidebar (empty initially)
       this.renderThumbnailSidebar();
@@ -530,7 +537,26 @@ class SupernoteView extends FileView {
       });
     });
 
+    menu.addSeparator();
+
+    menu.addItem((item) => {
+      item.setTitle('Adapt to theme');
+      item.setChecked(this.adaptToTheme);
+      item.onClick(() => {
+        this.adaptToTheme = !this.adaptToTheme;
+        this.applyThemeAdaptation();
+        this.saveSettings();
+      });
+    });
+
     menu.showAtMouseEvent(e);
+  }
+
+  private applyThemeAdaptation(): void {
+    // Apply or remove the theme adaptation class
+    if (this.mainContainer) {
+      this.mainContainer.toggleClass('no-theme-adapt', !this.adaptToTheme);
+    }
   }
 
   private goToPrevPage(): void {

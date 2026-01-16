@@ -295,9 +295,9 @@ body.supernote-resizing * {
   justify-content: center;
 }
 
-/* Dark mode inversion */
-.theme-dark .supernote-page-image,
-.theme-dark .supernote-thumbnail {
+/* Dark mode inversion - only when adapt to theme is enabled */
+.theme-dark .supernote-main:not(.no-theme-adapt) .supernote-page-image,
+.theme-dark .supernote-main:not(.no-theme-adapt) .supernote-thumbnail {
   filter: invert(1) hue-rotate(180deg);
 }
 
