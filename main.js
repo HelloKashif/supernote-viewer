@@ -321,6 +321,10 @@ var SupernoteView = class extends import_obsidian.FileView {
     super(leaf);
     this.currentFile = null;
     this.renderedImages = [];
+    // View settings
+    this.viewMode = "single";
+    this.fitMode = "width";
+    this.pagesContainer = null;
     this.viewContent = this.containerEl.children[1];
   }
   getViewType() {
@@ -342,7 +346,7 @@ var SupernoteView = class extends import_obsidian.FileView {
       const data = new Uint8Array(buffer);
       const note = parseSupernoteFile(data);
       loadingEl.remove();
-      this.renderHeader(note);
+      this.renderToolbar(note);
       await this.renderPages(note);
     } catch (error) {
       loadingEl.remove();
@@ -357,32 +361,81 @@ var SupernoteView = class extends import_obsidian.FileView {
     this.viewContent.empty();
     this.renderedImages = [];
     this.currentFile = null;
+    this.pagesContainer = null;
   }
-  renderHeader(note) {
+  renderToolbar(note) {
     var _a;
-    const header = this.viewContent.createEl("div", { cls: "supernote-header" });
-    header.createEl("h1", {
+    const toolbar = this.viewContent.createEl("div", { cls: "supernote-toolbar" });
+    const titleSection = toolbar.createEl("div", { cls: "supernote-toolbar-title" });
+    titleSection.createEl("span", {
       text: ((_a = this.file) == null ? void 0 : _a.basename) || "Supernote Note",
       cls: "supernote-title"
     });
-    const info = header.createEl("div", { cls: "supernote-info" });
-    info.createEl("span", {
-      text: `${note.pages.length} page${note.pages.length !== 1 ? "s" : ""} \u2022 ${note.equipment} \u2022 ${note.pageWidth}\xD7${note.pageHeight}`
+    titleSection.createEl("span", {
+      text: `${note.pages.length} page${note.pages.length !== 1 ? "s" : ""}`,
+      cls: "supernote-page-count"
+    });
+    const controls = toolbar.createEl("div", { cls: "supernote-toolbar-controls" });
+    const viewModeBtn = controls.createEl("button", {
+      cls: "supernote-toolbar-btn",
+      attr: { "aria-label": "Toggle view mode" }
+    });
+    this.updateViewModeButton(viewModeBtn);
+    viewModeBtn.addEventListener("click", () => {
+      this.viewMode = this.viewMode === "single" ? "two-page" : "single";
+      this.updateViewModeButton(viewModeBtn);
+      this.applyViewSettings();
+    });
+    const fitModeBtn = controls.createEl("button", {
+      cls: "supernote-toolbar-btn",
+      attr: { "aria-label": "Toggle fit mode" }
+    });
+    this.updateFitModeButton(fitModeBtn);
+    fitModeBtn.addEventListener("click", () => {
+      this.fitMode = this.fitMode === "width" ? "height" : "width";
+      this.updateFitModeButton(fitModeBtn);
+      this.applyViewSettings();
     });
   }
+  updateViewModeButton(btn) {
+    if (this.viewMode === "single") {
+      btn.setText("\u2610 Single Page");
+      btn.removeClass("active");
+    } else {
+      btn.setText("\u2610\u2610 Two Pages");
+      btn.addClass("active");
+    }
+  }
+  updateFitModeButton(btn) {
+    if (this.fitMode === "width") {
+      btn.setText("\u2194 Fit Width");
+      btn.removeClass("active");
+    } else {
+      btn.setText("\u2195 Fit Height");
+      btn.addClass("active");
+    }
+  }
+  applyViewSettings() {
+    if (!this.pagesContainer)
+      return;
+    this.pagesContainer.removeClass("view-single", "view-two-page");
+    this.pagesContainer.addClass(`view-${this.viewMode === "single" ? "single" : "two-page"}`);
+    this.pagesContainer.removeClass("fit-width", "fit-height");
+    this.pagesContainer.addClass(`fit-${this.fitMode}`);
+  }
   async renderPages(note) {
-    const container = this.viewContent.createEl("div", { cls: "supernote-pages" });
+    this.pagesContainer = this.viewContent.createEl("div", {
+      cls: `supernote-pages view-${this.viewMode === "single" ? "single" : "two-page"} fit-${this.fitMode}`
+    });
     for (let i = 0; i < note.pages.length; i++) {
       if (this.currentFile !== this.file) {
         return;
       }
-      const pageContainer = container.createEl("div", { cls: "supernote-page" });
-      if (note.pages.length > 1) {
-        pageContainer.createEl("div", {
-          cls: "supernote-page-header",
-          text: `Page ${i + 1}`
-        });
-      }
+      const pageContainer = this.pagesContainer.createEl("div", { cls: "supernote-page" });
+      const pageNumber = pageContainer.createEl("div", {
+        cls: "supernote-page-number",
+        text: `${i + 1}`
+      });
       try {
         const imageData = renderPage(note, i);
         if (imageData) {
@@ -393,8 +446,6 @@ var SupernoteView = class extends import_obsidian.FileView {
           });
           img.src = dataUrl;
           img.alt = `Page ${i + 1}`;
-          img.style.maxWidth = "100%";
-          img.style.height = "auto";
         }
       } catch (error) {
         pageContainer.createEl("div", {
@@ -402,9 +453,6 @@ var SupernoteView = class extends import_obsidian.FileView {
           text: `Error rendering page ${i + 1}`
         });
         console.error(`Error rendering page ${i + 1}:`, error);
-      }
-      if (i < note.pages.length - 1) {
-        container.createEl("hr", { cls: "supernote-page-divider" });
       }
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
