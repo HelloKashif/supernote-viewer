@@ -171,6 +171,7 @@ body.supernote-resizing * {
   border-radius: 4px;
   overflow: hidden;
   transition: border-color 0.15s ease;
+  flex-shrink: 0;
 }
 
 .supernote-thumbnail-wrapper:hover {
