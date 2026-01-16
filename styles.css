@@ -79,7 +79,7 @@
 .supernote-page-input {
   width: 2.5em;
   padding: 2px 4px;
-  margin: 0;
+  margin: 0 4px 0 0;
   border: 1px solid transparent;
   border-radius: 3px;
   background: transparent;
